@@ -44,14 +44,15 @@ export default function RankingPage() {
 
   useEffect(() => {
     if (!session) return;
-    Promise.all([
+    Promise.allSettled([
       fetch("/api/ranking/keywords").then((r) => r.json()),
       fetch("/api/ranking/results").then((r) => r.json()),
       fetch("/api/ranking/run").then((r) => r.json()),
     ]).then(([kw, res, run]) => {
-      setKeywords(kw.keywords ?? []);
-      setResults(res.results ?? []);
-      setActiveLLMs(run.activeLLMs ?? []);
+      if (kw.status === "fulfilled") setKeywords(kw.value.keywords ?? []);
+      if (res.status === "fulfilled") setResults(res.value.results ?? []);
+      else setError("Failed to load results — check Supabase connection");
+      if (run.status === "fulfilled") setActiveLLMs(run.value.activeLLMs ?? []);
     });
   }, [session]);
 
@@ -496,7 +497,13 @@ export default function RankingPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="px-3 py-1.5 text-sm border border-gray-200 rounded-md min-w-48"
             />
-            <button onClick={exportCSV} className="ml-auto px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-md font-medium">Export CSV</button>
+            <button
+              onClick={exportCSV}
+              disabled={filteredResults.length === 0}
+              className="ml-auto px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-md font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Export CSV {filteredResults.length > 0 && `(${filteredResults.length})`}
+            </button>
           </div>
 
           {/* Results Table — grouped by query + date + LLM */}
