@@ -49,9 +49,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Append to results file
-  const existing = await readResults();
-  existing.results = [...newResults, ...existing.results];
-  await writeResults(existing);
+  try {
+    const existing = await readResults();
+    existing.results = [...newResults, ...existing.results];
+    await writeResults(existing);
+  } catch (e) {
+    errors.push(`Failed to save results: ${e instanceof Error ? e.message : String(e)}`);
+  }
 
   return NextResponse.json({ results: newResults, errors });
 }

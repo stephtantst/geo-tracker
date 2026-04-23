@@ -97,6 +97,8 @@ export default function RankingPage() {
 
     setProgress({ done: 0, total, secsLeft: null });
 
+    let consecutiveErrors = 0;
+
     for (let i = 0; i < total; i++) {
       const kw = enabled[i];
       try {
@@ -105,12 +107,25 @@ export default function RankingPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ keywordIds: [kw.id], runsPerQuery }),
         });
-        const data = await res.json();
+        let data: { results?: RankingResult[]; errors?: string[]; error?: string };
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`Server returned invalid response (HTTP ${res.status}) — check your API keys and server logs`);
+        }
         if (!res.ok) throw new Error(data.error ?? "Run failed");
         allNew.push(...(data.results ?? []));
         if (data.errors?.length) allErrors.push(...data.errors);
+        consecutiveErrors = 0;
       } catch (e) {
         allErrors.push(`${kw.query}: ${e instanceof Error ? e.message : String(e)}`);
+        setError(allErrors.join("\n"));
+        consecutiveErrors++;
+        if (consecutiveErrors >= 3) {
+          allErrors.push(`Run aborted after 3 consecutive failures — fix the issue above and retry.`);
+          setError(allErrors.join("\n"));
+          break;
+        }
       }
 
       const done = i + 1;
