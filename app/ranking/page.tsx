@@ -411,11 +411,11 @@ export default function RankingPage() {
           )}
         </button>
         <button
-          onClick={() => runTests(5)}
+          onClick={() => runTests(3)}
           disabled={running}
           className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
         >
-          Test Run (5)
+          Test Run (3)
         </button>
         <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-2 bg-white">
           <label className="text-xs text-gray-500 whitespace-nowrap">Runs per query</label>
