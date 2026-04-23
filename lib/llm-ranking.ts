@@ -47,12 +47,37 @@ const DATA_DIR      = path.join(process.cwd(), "data");
 const KEYWORDS_FILE = path.join(DATA_DIR, "keywords.json");
 const RESULTS_FILE  = path.join(DATA_DIR, "results.json");
 
+// On Vercel the filesystem is read-only; use KV when the env var is present.
+const USE_KV = Boolean(process.env.KV_REST_API_URL);
+const MAX_STORED_RESULTS = 500;
+
 const POSITIVE_WORDS = ["affordable", "recommended", "popular", "trusted", "best", "top", "excellent", "great", "leading", "preferred", "ideal", "perfect", "strong", "reliable"];
 const NEGATIVE_WORDS = ["limited", "avoid", "poor", "bad", "expensive", "unreliable", "problematic", "worse", "inferior", "lacking"];
 
-// ─── File I/O ─────────────────────────────────────────────────────────────────
+// ─── Storage (KV in production, filesystem locally) ───────────────────────────
+
+async function kvGet<T>(key: string): Promise<T | null> {
+  const { kv } = await import("@vercel/kv");
+  return kv.get<T>(key);
+}
+
+async function kvSet(key: string, value: unknown): Promise<void> {
+  const { kv } = await import("@vercel/kv");
+  await kv.set(key, value);
+}
 
 export async function readKeywords(): Promise<KeywordsFile> {
+  if (USE_KV) {
+    try {
+      const data = await kvGet<KeywordsFile>("hitpay:keywords");
+      if (data) return data;
+      // First deploy: seed from the bundled file (readable even on Vercel)
+      const raw = await fs.readFile(KEYWORDS_FILE, "utf-8");
+      return JSON.parse(raw);
+    } catch {
+      return { keywords: [] };
+    }
+  }
   try {
     const raw = await fs.readFile(KEYWORDS_FILE, "utf-8");
     return JSON.parse(raw);
@@ -62,12 +87,24 @@ export async function readKeywords(): Promise<KeywordsFile> {
 }
 
 export async function writeKeywords(data: KeywordsFile): Promise<void> {
+  if (USE_KV) {
+    await kvSet("hitpay:keywords", data);
+    return;
+  }
   const tmp = KEYWORDS_FILE + ".tmp";
   await fs.writeFile(tmp, JSON.stringify(data, null, 2), "utf-8");
   await fs.rename(tmp, KEYWORDS_FILE);
 }
 
 export async function readResults(): Promise<ResultsFile> {
+  if (USE_KV) {
+    try {
+      const data = await kvGet<ResultsFile>("hitpay:results");
+      return data ?? { results: [] };
+    } catch {
+      return { results: [] };
+    }
+  }
   try {
     const raw = await fs.readFile(RESULTS_FILE, "utf-8");
     return JSON.parse(raw);
@@ -77,6 +114,12 @@ export async function readResults(): Promise<ResultsFile> {
 }
 
 export async function writeResults(data: ResultsFile): Promise<void> {
+  if (USE_KV) {
+    // Keep only the most recent results to stay within KV size limits
+    const trimmed: ResultsFile = { results: data.results.slice(0, MAX_STORED_RESULTS) };
+    await kvSet("hitpay:results", trimmed);
+    return;
+  }
   const tmp = RESULTS_FILE + ".tmp";
   await fs.writeFile(tmp, JSON.stringify(data, null, 2), "utf-8");
   await fs.rename(tmp, RESULTS_FILE);

@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.90.0",
     "@google-analytics/data": "^5.2.1",
     "@google/generative-ai": "^0.24.1",
+    "@vercel/kv": "^3.0.0",
     "google-auth-library": "^10.6.2",
     "next": "16.2.4",
     "next-auth": "^4.24.14",
