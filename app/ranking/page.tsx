@@ -26,6 +26,7 @@ export default function RankingPage() {
   const [snapshots, setSnapshots] = useState<Record<string, unknown>[]>([]);
   const [snapMarket, setSnapMarket] = useState<"SG" | "MY" | "PH">("SG");
   const [snapSection, setSnapSection] = useState<"online" | "inPerson">("online");
+  const [backfilling, setBackfilling] = useState(false);
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [results, setResults] = useState<RankingResult[]>([]);
   const [activeLLMs, setActiveLLMs] = useState<LLMProvider[]>([]);
@@ -844,7 +845,25 @@ export default function RankingPage() {
           {/* Mention Rate Trends */}
           {snapshots.length > 0 && (
             <div className="mt-10 border-t border-gray-200 pt-8">
-              <h2 className="text-lg font-semibold mb-1">Mention Rate Over Time</h2>
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-lg font-semibold">Mention Rate Over Time</h2>
+                <button
+                  onClick={async () => {
+                    setBackfilling(true);
+                    const res = await fetch("/api/ranking/snapshot", { method: "PUT" });
+                    const d = await res.json();
+                    if (d.saved > 0) {
+                      const snap = await fetch("/api/ranking/snapshot").then((r) => r.json());
+                      setSnapshots(snap.snapshots ?? []);
+                    }
+                    setBackfilling(false);
+                  }}
+                  disabled={backfilling}
+                  className="text-xs px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-md font-medium disabled:opacity-50"
+                >
+                  {backfilling ? "Backfilling…" : "Backfill from results"}
+                </button>
+              </div>
               <p className="text-sm text-gray-500 mb-4">How each brand's % mention has changed across daily runs</p>
               <div className="flex gap-3 mb-5">
                 <select value={snapMarket} onChange={(e) => setSnapMarket(e.target.value as "SG" | "MY" | "PH")} className="px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white">

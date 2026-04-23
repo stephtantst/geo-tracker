@@ -65,6 +65,60 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ saved: rows.length });
 }
 
+// PUT: backfill snapshots for all dates that have results
+export async function PUT(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+
+  const sb = getSupabase();
+  const { data: allResults, error } = await sb
+    .from("results")
+    .select("run_at, market, llm, hitpay_mentioned, competitors");
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!allResults?.length) return NextResponse.json({ dates: 0, saved: 0 });
+
+  const dates = [...new Set(allResults.map((r: { run_at: string }) => r.run_at.slice(0, 10)))].sort();
+
+  let totalSaved = 0;
+  for (const date of dates) {
+    const results = allResults.filter((r: { run_at: string }) => r.run_at.slice(0, 10) === date);
+    const rows: Record<string, unknown>[] = [];
+
+    for (const market of ["SG", "MY", "PH"] as const) {
+      const { online, inPerson } = COMPETITORS_BY_MARKET[market];
+      const marketResults = results.filter((r: { market: string }) => r.market === market);
+      if (!marketResults.length) continue;
+
+      for (const [section, brands] of [["online", online], ["inPerson", inPerson]] as const) {
+        for (const brand of brands) {
+          const llms = [...new Set(marketResults.map((r: { llm: string }) => r.llm))] as string[];
+          for (const llm of llms) {
+            const llmResults = marketResults.filter((r: { llm: string }) => r.llm === llm);
+            if (!llmResults.length) continue;
+            const mentioned = llmResults.filter((r: { hitpay_mentioned: boolean; competitors: string[] }) =>
+              brand === "HitPay" ? r.hitpay_mentioned : (r.competitors ?? []).includes(brand)
+            ).length;
+            rows.push({
+              snapshot_date: date, market, section, brand, llm,
+              mention_rate: Math.round((mentioned / llmResults.length) * 100),
+              mentioned_count: mentioned,
+              total_queries: llmResults.length,
+            });
+          }
+        }
+      }
+    }
+
+    if (rows.length) {
+      await sb.from("competitor_snapshots").upsert(rows, { onConflict: "snapshot_date,market,section,brand,llm" });
+      totalSaved += rows.length;
+    }
+  }
+
+  return NextResponse.json({ dates: dates.length, saved: totalSaved });
+}
+
 // GET: return snapshots for trend display
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
