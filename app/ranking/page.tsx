@@ -145,20 +145,25 @@ export default function RankingPage() {
     setProgress(null);
   }
 
-  async function exportCSV() {
+  function exportCSV() {
     const rows = filteredResults.map((r) => ({
       query: r.query, market: r.market, category: r.category,
       llm: r.llm, mentioned: r.hitpayMentioned ? "Yes" : "No",
-      position: r.position ?? "", sentiment: r.sentiment,
+      position: r.position != null ? String(r.position) : "",
+      sentiment: r.sentiment,
       competitors: r.competitors.join(", "),
       excerpt: r.excerpt ?? "", runAt: r.runAt,
     }));
-    const res = await fetch("/api/export", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: rows, filename: "geo-rankings" }),
-    });
-    const blob = await res.blob();
+    if (!rows.length) return;
+    const headers = Object.keys(rows[0]);
+    const lines = [
+      headers.join(","),
+      ...rows.map((row) =>
+        headers.map((h) => `"${String((row as Record<string, string>)[h] ?? "").replace(/"/g, '""')}"`).join(",")
+      ),
+    ];
+    const csv = lines.join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = "geo-rankings.csv"; a.click();
