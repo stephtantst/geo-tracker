@@ -47,36 +47,41 @@ const DATA_DIR      = path.join(process.cwd(), "data");
 const KEYWORDS_FILE = path.join(DATA_DIR, "keywords.json");
 const RESULTS_FILE  = path.join(DATA_DIR, "results.json");
 
-// On Vercel the filesystem is read-only; use KV when the env var is present.
-const USE_KV = Boolean(process.env.KV_REST_API_URL);
-const MAX_STORED_RESULTS = 500;
+// On Vercel the filesystem is read-only; use Supabase when env vars are present.
+const USE_SUPABASE = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 const POSITIVE_WORDS = ["affordable", "recommended", "popular", "trusted", "best", "top", "excellent", "great", "leading", "preferred", "ideal", "perfect", "strong", "reliable"];
 const NEGATIVE_WORDS = ["limited", "avoid", "poor", "bad", "expensive", "unreliable", "problematic", "worse", "inferior", "lacking"];
 
-// ─── Storage (KV in production, filesystem locally) ───────────────────────────
+// ─── Storage (Supabase in production, filesystem locally) ─────────────────────
 
-async function kvGet<T>(key: string): Promise<T | null> {
-  const { kv } = await import("@vercel/kv");
-  return kv.get<T>(key);
-}
-
-async function kvSet(key: string, value: unknown): Promise<void> {
-  const { kv } = await import("@vercel/kv");
-  await kv.set(key, value);
+function getSupabase() {
+  const { createClient } = require("@supabase/supabase-js");
+  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 
 export async function readKeywords(): Promise<KeywordsFile> {
-  if (USE_KV) {
-    try {
-      const data = await kvGet<KeywordsFile>("hitpay:keywords");
-      if (data) return data;
-      // First deploy: seed from the bundled file (readable even on Vercel)
-      const raw = await fs.readFile(KEYWORDS_FILE, "utf-8");
-      return JSON.parse(raw);
-    } catch {
-      return { keywords: [] };
+  if (USE_SUPABASE) {
+    const { data, error } = await getSupabase().from("keywords").select("*").order("created_at");
+    if (error) throw new Error(error.message);
+    const keywords: Keyword[] = (data ?? []).map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      query: r.query as string,
+      market: r.market as Market,
+      category: r.category as string,
+      createdAt: r.created_at as string,
+      enabled: r.enabled as boolean,
+    }));
+    // First deploy: seed from bundled file if DB is empty
+    if (keywords.length === 0) {
+      try {
+        const raw = await fs.readFile(KEYWORDS_FILE, "utf-8");
+        const file: KeywordsFile = JSON.parse(raw);
+        await writeKeywords(file);
+        return file;
+      } catch { /* ignore */ }
     }
+    return { keywords };
   }
   try {
     const raw = await fs.readFile(KEYWORDS_FILE, "utf-8");
@@ -87,8 +92,21 @@ export async function readKeywords(): Promise<KeywordsFile> {
 }
 
 export async function writeKeywords(data: KeywordsFile): Promise<void> {
-  if (USE_KV) {
-    await kvSet("hitpay:keywords", data);
+  if (USE_SUPABASE) {
+    const sb = getSupabase();
+    const rows = data.keywords.map((k) => ({
+      id: k.id, query: k.query, market: k.market,
+      category: k.category, created_at: k.createdAt, enabled: k.enabled,
+    }));
+    const { data: existing } = await sb.from("keywords").select("id");
+    const existingIds = new Set((existing ?? []).map((r: { id: string }) => r.id));
+    const newIds = new Set(rows.map((r) => r.id));
+    const toDelete = [...existingIds].filter((id) => !newIds.has(id as string));
+    if (toDelete.length > 0) await sb.from("keywords").delete().in("id", toDelete);
+    if (rows.length > 0) {
+      const { error } = await sb.from("keywords").upsert(rows);
+      if (error) throw new Error(error.message);
+    }
     return;
   }
   const tmp = KEYWORDS_FILE + ".tmp";
@@ -97,13 +115,29 @@ export async function writeKeywords(data: KeywordsFile): Promise<void> {
 }
 
 export async function readResults(): Promise<ResultsFile> {
-  if (USE_KV) {
-    try {
-      const data = await kvGet<ResultsFile>("hitpay:results");
-      return data ?? { results: [] };
-    } catch {
-      return { results: [] };
-    }
+  if (USE_SUPABASE) {
+    const { data, error } = await getSupabase()
+      .from("results").select("*").order("run_at", { ascending: false }).limit(500);
+    if (error) throw new Error(error.message);
+    const results: RankingResult[] = (data ?? []).map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      keywordId: r.keyword_id as string,
+      query: r.query as string,
+      market: r.market as Market,
+      category: r.category as string,
+      runAt: r.run_at as string,
+      llm: r.llm as LLMProvider,
+      llmResponse: (r.llm_response as string) ?? "",
+      hitpayMentioned: r.hitpay_mentioned as boolean,
+      position: r.position as number | null,
+      sentiment: r.sentiment as Sentiment,
+      competitors: (r.competitors as string[]) ?? [],
+      competitorRankings: (r.competitor_rankings as Record<string, number | null>) ?? {},
+      excerpt: r.excerpt as string | null,
+      citations: (r.citations as { url: string; context: string }[]) ?? [],
+      error: r.error as string | null,
+    }));
+    return { results };
   }
   try {
     const raw = await fs.readFile(RESULTS_FILE, "utf-8");
@@ -114,10 +148,18 @@ export async function readResults(): Promise<ResultsFile> {
 }
 
 export async function writeResults(data: ResultsFile): Promise<void> {
-  if (USE_KV) {
-    // Keep only the most recent results to stay within KV size limits
-    const trimmed: ResultsFile = { results: data.results.slice(0, MAX_STORED_RESULTS) };
-    await kvSet("hitpay:results", trimmed);
+  if (USE_SUPABASE) {
+    const rows = data.results.map((r) => ({
+      id: r.id, keyword_id: r.keywordId, query: r.query,
+      market: r.market, category: r.category, run_at: r.runAt,
+      llm: r.llm, llm_response: r.llmResponse,
+      hitpay_mentioned: r.hitpayMentioned, position: r.position,
+      sentiment: r.sentiment, competitors: r.competitors,
+      competitor_rankings: r.competitorRankings, excerpt: r.excerpt,
+      citations: r.citations, error: r.error,
+    }));
+    const { error } = await getSupabase().from("results").upsert(rows, { onConflict: "id" });
+    if (error) throw new Error(error.message);
     return;
   }
   const tmp = RESULTS_FILE + ".tmp";
