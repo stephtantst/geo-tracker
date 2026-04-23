@@ -26,6 +26,7 @@ export default function RankingPage() {
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [results, setResults] = useState<RankingResult[]>([]);
   const [activeLLMs, setActiveLLMs] = useState<LLMProvider[]>([]);
+  const [runMarket, setRunMarket] = useState<Market | "All">("All");
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number; secsLeft: number | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,8 +90,8 @@ export default function RankingPage() {
       setError("No LLM API keys configured. Add ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, or PERPLEXITY_API_KEY to .env.local");
       return;
     }
-    let enabled = keywords.filter((k) => k.enabled !== false);
-    if (!enabled.length) { setError("No enabled keywords found"); return; }
+    let enabled = keywords.filter((k) => k.enabled !== false && (runMarket === "All" || k.market === runMarket));
+    if (!enabled.length) { setError("No enabled keywords found for selected market"); return; }
 
     if (skipAlreadyRun) {
       const today = new Date().toISOString().slice(0, 10);
@@ -456,6 +457,18 @@ export default function RankingPage() {
           >
             Test Run (3)
           </button>
+          <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-2 bg-white">
+            <label className="text-xs text-gray-500 whitespace-nowrap">Market</label>
+            <select
+              value={runMarket}
+              onChange={(e) => setRunMarket(e.target.value as Market | "All")}
+              disabled={running}
+              className="text-sm font-medium text-gray-700 bg-transparent border-none outline-none cursor-pointer"
+            >
+              <option value="All">All</option>
+              {MARKETS.map((m) => <option key={m} value={m}>{MARKET_FLAGS[m]} {m}</option>)}
+            </select>
+          </div>
           <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-2 bg-white">
             <label className="text-xs text-gray-500 whitespace-nowrap">Runs per query</label>
             <select
