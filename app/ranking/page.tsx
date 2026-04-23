@@ -145,6 +145,22 @@ export default function RankingPage() {
     setProgress(null);
   }
 
+  function downloadCSV(rows: Record<string, string>[], filename: string) {
+    if (!rows.length) return;
+    const headers = Object.keys(rows[0]);
+    const lines = [
+      headers.join(","),
+      ...rows.map((row) =>
+        headers.map((h) => `"${String(row[h] ?? "").replace(/"/g, '""')}"`).join(",")
+      ),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function exportCSV() {
     const rows = filteredResults.map((r) => ({
       query: r.query, market: r.market, category: r.category,
@@ -154,20 +170,24 @@ export default function RankingPage() {
       competitors: r.competitors.join(", "),
       excerpt: r.excerpt ?? "", runAt: r.runAt,
     }));
-    if (!rows.length) return;
-    const headers = Object.keys(rows[0]);
-    const lines = [
-      headers.join(","),
-      ...rows.map((row) =>
-        headers.map((h) => `"${String((row as Record<string, string>)[h] ?? "").replace(/"/g, '""')}"`).join(",")
-      ),
-    ];
-    const csv = lines.join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "geo-rankings.csv"; a.click();
-    URL.revokeObjectURL(url);
+    downloadCSV(rows, "geo-rankings-raw.csv");
+  }
+
+  function exportTableCSV() {
+    const rows = groupedResults.map((g) => ({
+      query: g.query,
+      market: g.market,
+      category: g.category,
+      llm: LLM_LABELS[g.llm],
+      date: g.date,
+      mentionedCount: String(g.mentionedCount),
+      total: String(g.total),
+      mentionRate: `${g.mentionRate}%`,
+      avgPosition: g.avgPosition != null ? String(g.avgPosition) : "",
+      sentiment: g.topSentiment.replace("_", " "),
+      competitors: g.competitors.join(", "),
+    }));
+    downloadCSV(rows, "geo-rankings-summary.csv");
   }
 
   const filteredResults = useMemo(() => results.filter((r) => {
@@ -502,13 +522,22 @@ export default function RankingPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="px-3 py-1.5 text-sm border border-gray-200 rounded-md min-w-48"
             />
-            <button
-              onClick={exportCSV}
-              disabled={filteredResults.length === 0}
-              className="ml-auto px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-md font-medium disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Export CSV {filteredResults.length > 0 && `(${filteredResults.length})`}
-            </button>
+            <div className="ml-auto flex gap-2">
+              <button
+                onClick={exportTableCSV}
+                disabled={groupedResults.length === 0}
+                className="px-3 py-1.5 text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Export Summary {groupedResults.length > 0 && `(${groupedResults.length} rows)`}
+              </button>
+              <button
+                onClick={exportCSV}
+                disabled={filteredResults.length === 0}
+                className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-md font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Export Raw {filteredResults.length > 0 && `(${filteredResults.length} rows)`}
+              </button>
+            </div>
           </div>
 
           {/* Results Table — grouped by query + date + LLM */}
