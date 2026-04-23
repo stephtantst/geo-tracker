@@ -80,7 +80,7 @@ export default function RankingPage() {
     setKeywords((prev) => prev.filter((k) => k.id !== id));
   }
 
-  async function runTests() {
+  async function runTests(limit?: number) {
     if (activeLLMs.length === 0) {
       setError("No LLM API keys configured. Add ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, or PERPLEXITY_API_KEY to .env.local");
       return;
@@ -92,7 +92,7 @@ export default function RankingPage() {
     setError(null);
     const allErrors: string[] = [];
     const allNew: RankingResult[] = [];
-    const total = enabled.length;
+    const total = limit ? Math.min(limit, enabled.length) : enabled.length;
     const startMs = Date.now();
 
     setProgress({ done: 0, total, secsLeft: null });
@@ -400,7 +400,7 @@ export default function RankingPage() {
       {/* Run Button */}
       <div className="flex items-center gap-3 mb-8">
         <button
-          onClick={runTests}
+          onClick={() => runTests()}
           disabled={running}
           className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
@@ -409,6 +409,13 @@ export default function RankingPage() {
           ) : (
             "▶ Run Tests"
           )}
+        </button>
+        <button
+          onClick={() => runTests(5)}
+          disabled={running}
+          className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+        >
+          Test Run (5)
         </button>
         <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-2 bg-white">
           <label className="text-xs text-gray-500 whitespace-nowrap">Runs per query</label>
