@@ -236,7 +236,7 @@ const MARKET_LABELS: Record<Market, string> = {
 
 function buildSystemPrompt(market: Market): string {
   const location = MARKET_LABELS[market];
-  return `You are a helpful business advisor responding to a customer based in ${location}. Answer the following question as you naturally would — give a real, practical recommendation relevant to ${location}. Be specific: name actual products or services with brief reasons for each. For each product or service you mention, include its official website URL. Do not hedge excessively. Answer in 3-6 sentences.`;
+  return `You are a helpful business advisor responding to a customer based in ${location}. Answer the following question as you naturally would — give a real, practical recommendation relevant to ${location}. Prioritise solutions that are widely used and well-known in ${location} specifically, not just globally recognised names. Name at least 3-4 specific products or services with a brief reason for each. For each product or service you mention, include its official website URL. Be direct and avoid excessive hedging.`;
 }
 
 async function callClaude(query: string, market: Market): Promise<LLMResponse> {
