@@ -232,10 +232,12 @@ export default function RankingPage() {
       });
   }, [filteredResults, sortBy, sortDir]);
 
-  // History chart data: mention rate % per day
+  // History chart data: mention rate % per day (respects market + LLM filters)
   const historyData = useMemo(() => {
     const byDate: Record<string, { total: number; mentioned: number }> = {};
     for (const r of results) {
+      if (filterMarket !== "All" && r.market !== filterMarket) continue;
+      if (filterLLM !== "All" && r.llm !== filterLLM) continue;
       const date = r.runAt.slice(0, 10);
       if (!byDate[date]) byDate[date] = { total: 0, mentioned: 0 };
       byDate[date].total++;
@@ -246,7 +248,7 @@ export default function RankingPage() {
       .map(([date, { total, mentioned }]) => ({
         date, mentionRate: Math.round((mentioned / total) * 100),
       }));
-  }, [results]);
+  }, [results, filterMarket, filterLLM]);
 
   // Competitor comparison matrix
   const comparisonData = useMemo(() => {
@@ -620,7 +622,11 @@ export default function RankingPage() {
           {historyData.length > 1 && (
             <div>
               <h2 className="text-lg font-semibold mb-1">HitPay Mention Rate Over Time</h2>
-              <p className="text-sm text-gray-500 mb-4">% of queries where HitPay was mentioned per run date</p>
+              <p className="text-sm text-gray-500 mb-4">
+                % of queries where HitPay was mentioned per run date
+                {filterMarket !== "All" && ` · ${MARKET_FLAGS[filterMarket]} ${filterMarket}`}
+                {filterLLM !== "All" && ` · ${LLM_LABELS[filterLLM as LLMProvider]}`}
+              </p>
               <div className="rounded-lg border border-gray-200 p-4">
                 <ResponsiveContainer width="100%" height={280}>
                   <LineChart data={historyData}>
