@@ -41,6 +41,8 @@ export default function RankingPage() {
   const [runsPerQuery, setRunsPerQuery] = useState(3);
   const [skipAlreadyRun, setSkipAlreadyRun] = useState(true);
   const [sortBy, setSortBy] = useState<"mentionRate" | "avgPosition" | "topSentiment" | null>(null);
+  const [compSortLLM, setCompSortLLM] = useState<LLMProvider | null>(null);
+  const [compSortDir, setCompSortDir] = useState<"asc" | "desc">("desc");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
@@ -725,47 +727,73 @@ export default function RankingPage() {
                   return Math.round((count / llmResults.length) * 100);
                 };
 
-                const renderSection = (brands: string[], label: string) => (
-                  <div key={label}>
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">{label}</h3>
-                    <div className="overflow-x-auto rounded-lg border border-gray-200 mb-4">
-                      <table className="w-full text-sm">
-                        <thead className="bg-gray-50 text-left">
-                          <tr>
-                            <th className="px-4 py-2 font-medium text-gray-600">Brand</th>
-                            {llms.map((llm) => (
-                              <th key={llm} className="px-4 py-2 font-medium text-center" style={{ color: LLM_COLORS[llm] }}>{LLM_LABELS[llm]}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                          {brands.map((brand) => (
-                            <tr key={brand} className={brand === "HitPay" ? "bg-blue-50 font-semibold" : "hover:bg-gray-50"}>
-                              <td className="px-4 py-2 text-gray-800 flex items-center gap-2">
-                                {brand}
-                                {BRAND_URLS[brand] && (
-                                  <a href={BRAND_URLS[brand]} target="_blank" rel="noopener noreferrer"
-                                    className="text-gray-300 hover:text-blue-500 text-xs" onClick={(e) => e.stopPropagation()}>↗</a>
-                                )}
-                              </td>
-                              {llms.map((llm) => {
-                                const pct = mentionRate(brand, llm);
-                                const bg = pct === null ? "" : pct >= 60 ? "bg-green-100 text-green-700" : pct >= 30 ? "bg-yellow-100 text-yellow-700" : pct > 0 ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-400";
-                                return (
-                                  <td key={llm} className="px-4 py-2 text-center">
-                                    {pct !== null
-                                      ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${bg}`}>{pct}%</span>
-                                      : <span className="text-gray-300">—</span>}
-                                  </td>
-                                );
-                              })}
+                const renderSection = (brands: string[], label: string) => {
+                  const sortedBrands = compSortLLM
+                    ? [...brands].sort((a, b) => {
+                        const pa = mentionRate(a, compSortLLM) ?? -1;
+                        const pb = mentionRate(b, compSortLLM) ?? -1;
+                        return compSortDir === "desc" ? pb - pa : pa - pb;
+                      })
+                    : brands;
+
+                  const handleSortCol = (llm: LLMProvider) => {
+                    if (compSortLLM === llm) {
+                      setCompSortDir((d) => d === "desc" ? "asc" : "desc");
+                    } else {
+                      setCompSortLLM(llm);
+                      setCompSortDir("desc");
+                    }
+                  };
+
+                  return (
+                    <div key={label}>
+                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">{label}</h3>
+                      <div className="overflow-x-auto rounded-lg border border-gray-200 mb-4">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50 text-left">
+                            <tr>
+                              <th className="px-4 py-2 font-medium text-gray-600">Brand</th>
+                              {llms.map((llm) => (
+                                <th
+                                  key={llm}
+                                  className="px-4 py-2 font-medium text-center cursor-pointer select-none hover:bg-gray-100 whitespace-nowrap"
+                                  style={{ color: LLM_COLORS[llm] }}
+                                  onClick={() => handleSortCol(llm)}
+                                >
+                                  {LLM_LABELS[llm]} {compSortLLM === llm ? (compSortDir === "desc" ? "↓" : "↑") : <span className="text-gray-300">↕</span>}
+                                </th>
+                              ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {sortedBrands.map((brand) => (
+                              <tr key={brand} className={brand === "HitPay" ? "bg-blue-50 font-semibold" : "hover:bg-gray-50"}>
+                                <td className="px-4 py-2 text-gray-800 flex items-center gap-2">
+                                  {brand}
+                                  {BRAND_URLS[brand] && (
+                                    <a href={BRAND_URLS[brand]} target="_blank" rel="noopener noreferrer"
+                                      className="text-gray-300 hover:text-blue-500 text-xs" onClick={(e) => e.stopPropagation()}>↗</a>
+                                  )}
+                                </td>
+                                {llms.map((llm) => {
+                                  const pct = mentionRate(brand, llm);
+                                  const bg = pct === null ? "" : pct >= 60 ? "bg-green-100 text-green-700" : pct >= 30 ? "bg-yellow-100 text-yellow-700" : pct > 0 ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-400";
+                                  return (
+                                    <td key={llm} className="px-4 py-2 text-center">
+                                      {pct !== null
+                                        ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${bg}`}>{pct}%</span>
+                                        : <span className="text-gray-300">—</span>}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                );
+                  );
+                };
 
                 return (
                   <div key={market}>
