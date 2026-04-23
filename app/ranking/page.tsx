@@ -39,6 +39,7 @@ export default function RankingPage() {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [expandedCitations, setExpandedCitations] = useState<Set<string>>(new Set());
   const [runsPerQuery, setRunsPerQuery] = useState(3);
+  const [skipAlreadyRun, setSkipAlreadyRun] = useState(true);
   const [sortBy, setSortBy] = useState<"mentionRate" | "avgPosition" | "topSentiment" | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -86,8 +87,15 @@ export default function RankingPage() {
       setError("No LLM API keys configured. Add ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, or PERPLEXITY_API_KEY to .env.local");
       return;
     }
-    const enabled = keywords.filter((k) => k.enabled !== false);
+    let enabled = keywords.filter((k) => k.enabled !== false);
     if (!enabled.length) { setError("No enabled keywords found"); return; }
+
+    if (skipAlreadyRun) {
+      const today = new Date().toISOString().slice(0, 10);
+      const ranToday = new Set(results.filter((r) => r.runAt.slice(0, 10) === today).map((r) => r.keywordId));
+      enabled = enabled.filter((k) => !ranToday.has(k.id));
+      if (!enabled.length) { setError("All queries already run today. Uncheck \"Skip already run today\" to re-run."); return; }
+    }
 
     setRunning(true);
     setError(null);
@@ -456,6 +464,16 @@ export default function RankingPage() {
             {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}×</option>)}
           </select>
         </div>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={skipAlreadyRun}
+            onChange={(e) => setSkipAlreadyRun(e.target.checked)}
+            disabled={running}
+            className="rounded"
+          />
+          <span className="text-xs text-gray-500 whitespace-nowrap">Skip already run today</span>
+        </label>
         {progress && (
           <div className="flex flex-col gap-1 min-w-64">
             <div className="flex items-center justify-between text-xs text-gray-500">
