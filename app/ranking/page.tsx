@@ -23,6 +23,9 @@ export default function RankingPage() {
   const { data: session, status } = useSession();
   const [tab, setTab] = useState<"results" | "comparison" | "trends">("results");
   const [trendQuery, setTrendQuery] = useState("");
+  const [snapshots, setSnapshots] = useState<Record<string, unknown>[]>([]);
+  const [snapMarket, setSnapMarket] = useState<"SG" | "MY" | "PH">("SG");
+  const [snapSection, setSnapSection] = useState<"online" | "inPerson">("online");
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [results, setResults] = useState<RankingResult[]>([]);
   const [activeLLMs, setActiveLLMs] = useState<LLMProvider[]>([]);
@@ -52,11 +55,13 @@ export default function RankingPage() {
       fetch("/api/ranking/keywords").then((r) => r.json()),
       fetch("/api/ranking/results").then((r) => r.json()),
       fetch("/api/ranking/run").then((r) => r.json()),
-    ]).then(([kw, res, run]) => {
+      fetch("/api/ranking/snapshot").then((r) => r.json()),
+    ]).then(([kw, res, run, snap]) => {
       if (kw.status === "fulfilled") setKeywords(kw.value.keywords ?? []);
       if (res.status === "fulfilled") setResults(res.value.results ?? []);
       else setError("Failed to load results — check Supabase connection");
       if (run.status === "fulfilled") setActiveLLMs(run.value.activeLLMs ?? []);
+      if (snap.status === "fulfilled") setSnapshots(snap.value.snapshots ?? []);
     });
   }, [session]);
 
@@ -154,6 +159,23 @@ export default function RankingPage() {
     if (allErrors.length) setError(allErrors.join("\n"));
     setRunning(false);
     setProgress(null);
+
+    // Save a competitor snapshot for today after every run
+    if (allNew.length > 0) {
+      const today = new Date().toISOString().slice(0, 10);
+      fetch("/api/ranking/snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: today }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.saved > 0) {
+            fetch("/api/ranking/snapshot").then((r) => r.json()).then((d) => setSnapshots(d.snapshots ?? []));
+          }
+        })
+        .catch(() => {/* non-critical */});
+    }
   }
 
   function downloadCSV(rows: Record<string, string>[], filename: string) {
@@ -817,6 +839,86 @@ export default function RankingPage() {
                 );
               })}
             </>
+          )}
+
+          {/* Mention Rate Trends */}
+          {snapshots.length > 0 && (
+            <div className="mt-10 border-t border-gray-200 pt-8">
+              <h2 className="text-lg font-semibold mb-1">Mention Rate Over Time</h2>
+              <p className="text-sm text-gray-500 mb-4">How each brand's % mention has changed across daily runs</p>
+              <div className="flex gap-3 mb-5">
+                <select value={snapMarket} onChange={(e) => setSnapMarket(e.target.value as "SG" | "MY" | "PH")} className="px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white">
+                  {(["SG", "MY", "PH"] as const).map((m) => <option key={m} value={m}>{MARKET_FLAGS[m]} {m}</option>)}
+                </select>
+                <select value={snapSection} onChange={(e) => setSnapSection(e.target.value as "online" | "inPerson")} className="px-3 py-1.5 text-sm border border-gray-200 rounded-md bg-white">
+                  <option value="online">Online Payments</option>
+                  <option value="inPerson">In-Person Payments</option>
+                </select>
+              </div>
+              {(() => {
+                const filtered = snapshots.filter((s: Record<string, unknown>) => s.market === snapMarket && s.section === snapSection);
+                const dates = [...new Set(filtered.map((s: Record<string, unknown>) => s.snapshot_date as string))].sort();
+                const brands = [...new Set(filtered.map((s: Record<string, unknown>) => s.brand as string))];
+                const llms = [...new Set(filtered.map((s: Record<string, unknown>) => s.llm as string))];
+                if (!dates.length) return <p className="text-sm text-gray-400">No snapshot data yet for this market/section — run tests first.</p>;
+                return (
+                  <div className="overflow-x-auto rounded-lg border border-gray-200">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-medium text-gray-600 whitespace-nowrap">Brand</th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-600 whitespace-nowrap">LLM</th>
+                          {dates.map((d) => (
+                            <th key={d} className="px-4 py-2 text-center font-medium text-gray-600 whitespace-nowrap">{d}</th>
+                          ))}
+                          {dates.length > 1 && <th className="px-4 py-2 text-center font-medium text-gray-600 whitespace-nowrap">Change</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {brands.flatMap((brand) =>
+                          llms.map((llm) => {
+                            const row = filtered.filter((s: Record<string, unknown>) => s.brand === brand && s.llm === llm);
+                            if (!row.length) return null;
+                            const byDate = Object.fromEntries(row.map((s: Record<string, unknown>) => [s.snapshot_date as string, s.mention_rate as number]));
+                            const first = byDate[dates[0]] ?? null;
+                            const last = byDate[dates[dates.length - 1]] ?? null;
+                            const delta = first !== null && last !== null && dates.length > 1 ? last - first : null;
+                            return (
+                              <tr key={`${brand}-${llm}`} className={brand === "HitPay" ? "bg-blue-50 font-semibold" : "hover:bg-gray-50"}>
+                                <td className="px-4 py-2 text-gray-800">{brand}</td>
+                                <td className="px-4 py-2">
+                                  <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ backgroundColor: LLM_COLORS[llm as LLMProvider] + "20", color: LLM_COLORS[llm as LLMProvider] }}>
+                                    {LLM_LABELS[llm as LLMProvider]}
+                                  </span>
+                                </td>
+                                {dates.map((d) => {
+                                  const pct = byDate[d] ?? null;
+                                  const bg = pct === null ? "" : pct >= 60 ? "bg-green-100 text-green-700" : pct >= 30 ? "bg-yellow-100 text-yellow-700" : pct > 0 ? "bg-red-100 text-red-600" : "bg-gray-100 text-gray-400";
+                                  return (
+                                    <td key={d} className="px-4 py-2 text-center">
+                                      {pct !== null ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${bg}`}>{pct}%</span> : <span className="text-gray-300">—</span>}
+                                    </td>
+                                  );
+                                })}
+                                {dates.length > 1 && (
+                                  <td className="px-4 py-2 text-center">
+                                    {delta !== null && delta !== 0 ? (
+                                      <span className={`text-xs font-semibold ${delta > 0 ? "text-green-600" : "text-red-500"}`}>
+                                        {delta > 0 ? `↑${delta}pp` : `↓${Math.abs(delta)}pp`}
+                                      </span>
+                                    ) : delta === 0 ? <span className="text-gray-300 text-xs">—</span> : null}
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          }).filter(Boolean)
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
           )}
         </div>
       )}
