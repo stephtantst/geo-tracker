@@ -433,49 +433,51 @@ export default function RankingPage() {
         </div>
       </div>
 
-      {/* Run Button */}
-      <div className="flex items-center gap-3 mb-8">
-        <button
-          onClick={() => runTests()}
-          disabled={running}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {running ? (
-            <><span className="animate-spin">⟳</span> Running…</>
-          ) : (
-            "▶ Run Tests"
-          )}
-        </button>
-        <button
-          onClick={() => runTests(3)}
-          disabled={running}
-          className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-        >
-          Test Run (3)
-        </button>
-        <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-2 bg-white">
-          <label className="text-xs text-gray-500 whitespace-nowrap">Runs per query</label>
-          <select
-            value={runsPerQuery}
-            onChange={(e) => setRunsPerQuery(Number(e.target.value))}
+      {/* Run Controls */}
+      <div className="flex flex-col gap-3 mb-8">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => runTests()}
             disabled={running}
-            className="text-sm font-medium text-gray-700 bg-transparent border-none outline-none cursor-pointer"
+            className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}×</option>)}
-          </select>
-        </div>
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={skipAlreadyRun}
-            onChange={(e) => setSkipAlreadyRun(e.target.checked)}
+            {running ? (
+              <><span className="animate-spin">⟳</span> Running…</>
+            ) : (
+              "▶ Run Tests"
+            )}
+          </button>
+          <button
+            onClick={() => runTests(3)}
             disabled={running}
-            className="rounded"
-          />
-          <span className="text-xs text-gray-500 whitespace-nowrap">Skip already run today</span>
-        </label>
+            className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            Test Run (3)
+          </button>
+          <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-2 bg-white">
+            <label className="text-xs text-gray-500 whitespace-nowrap">Runs per query</label>
+            <select
+              value={runsPerQuery}
+              onChange={(e) => setRunsPerQuery(Number(e.target.value))}
+              disabled={running}
+              className="text-sm font-medium text-gray-700 bg-transparent border-none outline-none cursor-pointer"
+            >
+              {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}×</option>)}
+            </select>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none border border-gray-200 rounded-lg px-3 py-2 bg-white">
+            <input
+              type="checkbox"
+              checked={skipAlreadyRun}
+              onChange={(e) => setSkipAlreadyRun(e.target.checked)}
+              disabled={running}
+              className="rounded accent-blue-600"
+            />
+            <span className="text-xs text-gray-600 whitespace-nowrap">Skip already run today</span>
+          </label>
+        </div>
         {progress && (
-          <div className="flex flex-col gap-1 min-w-64">
+          <div className="flex flex-col gap-1 max-w-sm">
             <div className="flex items-center justify-between text-xs text-gray-500">
               <span>{progress.done} / {progress.total} queries</span>
               {progress.secsLeft !== null && progress.secsLeft > 0 && (
@@ -493,7 +495,7 @@ export default function RankingPage() {
           </div>
         )}
         {results.length > 0 && !running && (
-          <span className="text-sm text-gray-400">
+          <span className="text-xs text-gray-400">
             {results.length} results · last run {new Date(results[0]?.runAt).toLocaleString()}
           </span>
         )}
