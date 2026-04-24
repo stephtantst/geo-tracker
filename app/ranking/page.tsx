@@ -843,8 +843,7 @@ export default function RankingPage() {
           )}
 
           {/* Mention Rate Trends */}
-          {snapshots.length > 0 && (
-            <div className="mt-10 border-t border-gray-200 pt-8">
+          <div className="mt-10 border-t border-gray-200 pt-8">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="text-lg font-semibold">Mention Rate Over Time</h2>
                 <button
@@ -938,7 +937,6 @@ export default function RankingPage() {
                 );
               })()}
             </div>
-          )}
         </div>
       )}
 
