@@ -4,6 +4,13 @@ import { BetaAnalyticsDataClient } from "@google-analytics/data";
 import { OAuth2Client } from "google-auth-library";
 import { authOptions } from "@/lib/auth";
 
+const EXCLUDED_AI_SOURCES = [
+  "babybeyou",
+  "glybygirlslikeyou.com",
+  "flowerandyou.com",
+  "euniqyou.com",
+];
+
 const AI_SOURCES = [
   "perplexity.ai",
   "chatgpt.com",
@@ -131,10 +138,13 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+    const excludeAiSource = (rows: Record<string, string>[]) =>
+      rows.filter((r) => !EXCLUDED_AI_SOURCES.some((x) => r.source?.toLowerCase().includes(x.toLowerCase())));
+
     return NextResponse.json({
       granularity,
-      aiReferrals: formatRows(sessionsBySource[0]?.rows ?? [], ["source", "date"], ["sessions", "newUsers"]),
-      blogPages: formatRows(blogPages[0]?.rows ?? [], ["landingPage", "source"], ["sessions", "newUsers", "avgDuration", "engagementRate", "bounceRate", "pagesPerSession"]),
+      aiReferrals: excludeAiSource(formatRows(sessionsBySource[0]?.rows ?? [], ["source", "date"], ["sessions", "newUsers"])),
+      blogPages: excludeAiSource(formatRows(blogPages[0]?.rows ?? [], ["landingPage", "source"], ["sessions", "newUsers", "avgDuration", "engagementRate", "bounceRate", "pagesPerSession"])),
       organicByDate: formatRows(organicSearch[0]?.rows ?? [], ["source", "date"], ["sessions"]),
       organicPages: formatRows(organicPages[0]?.rows ?? [], ["landingPage", "source"], ["sessions", "newUsers", "avgDuration", "engagementRate", "bounceRate", "pagesPerSession"]),
     });
