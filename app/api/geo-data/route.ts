@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
   const propertyId = process.env.GA4_PROPERTY_ID!;
 
   try {
-    const [sessionsBySource, blogPages, organicSearch, organicPages] = await Promise.all([
+    const [sessionsBySource, blogPages, organicSearch, organicPages, keyPagesByDate] = await Promise.all([
       analyticsClient.runReport({
         property: `properties/${propertyId}`,
         dateRanges: dateRange,
@@ -136,6 +136,41 @@ export async function GET(req: NextRequest) {
         orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
         limit: 100,
       }),
+
+      // Key landing pages time-series: /, /sg/, /my/, /ph/ — all traffic sources
+      analyticsClient.runReport({
+        property: `properties/${propertyId}`,
+        dateRanges: dateRange,
+        dimensions: [{ name: "landingPage" }, { name: dateDimension }],
+        metrics: [
+          { name: "sessions" },
+          { name: "newUsers" },
+          { name: "averageSessionDuration" },
+          { name: "engagementRate" },
+          { name: "bounceRate" },
+          { name: "screenPageViewsPerSession" },
+        ],
+        dimensionFilter: {
+          orGroup: {
+            expressions: [
+              {
+                filter: {
+                  fieldName: "landingPage",
+                  stringFilter: { matchType: "EXACT" as const, value: "/" },
+                },
+              },
+              ...(["/sg/", "/my/", "/ph/"]).map((page) => ({
+                filter: {
+                  fieldName: "landingPage",
+                  stringFilter: { matchType: "BEGINS_WITH" as const, value: page },
+                },
+              })),
+            ],
+          },
+        },
+        orderBys: [{ dimension: { dimensionName: dateDimension } }],
+        limit: 5000,
+      }),
     ]);
 
     const excludeAiSource = (rows: Record<string, string>[]) =>
@@ -147,6 +182,7 @@ export async function GET(req: NextRequest) {
       blogPages: excludeAiSource(formatRows(blogPages[0]?.rows ?? [], ["landingPage", "source"], ["sessions", "newUsers", "avgDuration", "engagementRate", "bounceRate", "pagesPerSession"])),
       organicByDate: formatRows(organicSearch[0]?.rows ?? [], ["source", "date"], ["sessions"]),
       organicPages: formatRows(organicPages[0]?.rows ?? [], ["landingPage", "source"], ["sessions", "newUsers", "avgDuration", "engagementRate", "bounceRate", "pagesPerSession"]),
+      landingPageTrends: formatRows(keyPagesByDate[0]?.rows ?? [], ["landingPage", "date"], ["sessions", "newUsers", "avgDuration", "engagementRate", "bounceRate", "pagesPerSession"]),
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";

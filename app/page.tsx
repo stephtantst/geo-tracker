@@ -18,6 +18,7 @@ interface GeoData {
   blogPages?: Record<string, string>[];
   organicByDate: Record<string, string>[];
   organicPages?: Record<string, string>[];
+  landingPageTrends?: Record<string, string>[];
 }
 
 interface DateRange {
@@ -106,6 +107,107 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "bounceRate",      label: "Bounce Rate"   },
   { key: "pagesPerSession", label: "Pages/Session" },
 ];
+
+const KEY_PAGES = ["/", "/sg/", "/my/", "/ph/"];
+
+const PAGE_LABELS: Record<string, string> = {
+  "/":    "Homepage",
+  "/sg/": "SG",
+  "/my/": "MY",
+  "/ph/": "PH",
+};
+
+const PAGE_COLORS: Record<string, string> = {
+  "/":    "#3b82f6",
+  "/sg/": "#10b981",
+  "/my/": "#f59e0b",
+  "/ph/": "#8b5cf6",
+};
+
+interface MetricConfig {
+  key: string;
+  label: string;
+  isRate: boolean;
+  fmt: (v: number) => string;
+  axisFmt: (v: number) => string;
+}
+
+const METRIC_CONFIGS: MetricConfig[] = [
+  {
+    key: "sessions", label: "Sessions", isRate: false,
+    fmt: (v) => Math.round(v).toLocaleString(),
+    axisFmt: (v) => Math.round(v).toLocaleString(),
+  },
+  {
+    key: "newUsers", label: "New Users", isRate: false,
+    fmt: (v) => Math.round(v).toLocaleString(),
+    axisFmt: (v) => Math.round(v).toLocaleString(),
+  },
+  {
+    key: "avgDuration", label: "Avg Duration", isRate: true,
+    fmt: (v) => { const s = Math.round(v); const m = Math.floor(s / 60); return m > 0 ? `${m}m ${s % 60}s` : `${s}s`; },
+    axisFmt: (v) => { const m = Math.floor(v / 60); return m > 0 ? `${m}m` : `${Math.round(v)}s`; },
+  },
+  {
+    key: "engagementRate", label: "Engagement Rate", isRate: true,
+    fmt: (v) => `${(v * 100).toFixed(1)}%`,
+    axisFmt: (v) => `${(v * 100).toFixed(0)}%`,
+  },
+  {
+    key: "bounceRate", label: "Bounce Rate", isRate: true,
+    fmt: (v) => `${(v * 100).toFixed(1)}%`,
+    axisFmt: (v) => `${(v * 100).toFixed(0)}%`,
+  },
+  {
+    key: "pagesPerSession", label: "Pages / Session", isRate: true,
+    fmt: (v) => v.toFixed(2),
+    axisFmt: (v) => v.toFixed(1),
+  },
+];
+
+function normalizeLandingPage(path: string): string {
+  if (path === "/" || path === "") return "/";
+  if (path.startsWith("/sg/")) return "/sg/";
+  if (path.startsWith("/my/")) return "/my/";
+  if (path.startsWith("/ph/")) return "/ph/";
+  return path;
+}
+
+function buildPageMetricData(
+  rows: Record<string, string>[],
+  metricKey: string,
+  isRate: boolean,
+  gran: string
+): Record<string, number | string>[] {
+  const datePageMap: Record<string, Record<string, { sum: number; sessions: number }>> = {};
+
+  for (const row of rows) {
+    const page = normalizeLandingPage(row.landingPage);
+    if (!KEY_PAGES.includes(page)) continue;
+    const date = normalizeDate(row.date, gran);
+    const metricVal = parseFloat(row[metricKey] ?? "0");
+    const sessions = parseFloat(row.sessions ?? "1");
+
+    if (!datePageMap[date]) datePageMap[date] = {};
+    if (!datePageMap[date][page]) datePageMap[date][page] = { sum: 0, sessions: 0 };
+
+    datePageMap[date][page].sum += isRate ? metricVal * sessions : metricVal;
+    datePageMap[date][page].sessions += sessions;
+  }
+
+  return Object.entries(datePageMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, pageVals]) => {
+      const entry: Record<string, number | string> = { date };
+      for (const page of KEY_PAGES) {
+        if (pageVals[page]) {
+          const { sum, sessions } = pageVals[page];
+          entry[page] = isRate ? sum / sessions : sum;
+        }
+      }
+      return entry;
+    });
+}
 
 function fmtDuration(seconds: string) {
   const s = Math.round(parseFloat(seconds ?? "0"));
@@ -296,6 +398,70 @@ function ChartSection({
   );
 }
 
+function LandingPageTrendsSection({
+  rows,
+  gran,
+}: {
+  rows: Record<string, string>[];
+  gran: string;
+}) {
+  const tickFmt = (d: string) => formatTickLabel(d, gran);
+
+  return (
+    <div>
+      <h2 className="text-lg font-semibold mb-1">Key Landing Page Performance Over Time</h2>
+      <p className="text-sm text-gray-500 mb-5">
+        All traffic sources — how HitPay&apos;s main market landing pages have changed over time
+      </p>
+      <div className="grid grid-cols-2 gap-5">
+        {METRIC_CONFIGS.map(({ key, label, isRate, fmt, axisFmt }) => {
+          const data = buildPageMetricData(rows, key, isRate, gran);
+          return (
+            <div key={key} className="rounded-lg border border-gray-200 p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">{label}</h3>
+              {data.length > 0 ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={data}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={tickFmt} />
+                    <YAxis
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={axisFmt}
+                      width={52}
+                    />
+                    <Tooltip
+                      formatter={(v: unknown, name: unknown) => [fmt(v as number), PAGE_LABELS[name as string] ?? String(name)]}
+                      labelFormatter={(d) => tickFmt(String(d))}
+                    />
+                    <Legend
+                      formatter={(name: string) => PAGE_LABELS[name] ?? name}
+                      iconType="line"
+                      wrapperStyle={{ fontSize: 11 }}
+                    />
+                    {KEY_PAGES.map((page) => (
+                      <Line
+                        key={page}
+                        type="monotone"
+                        dataKey={page}
+                        stroke={PAGE_COLORS[page]}
+                        dot={false}
+                        strokeWidth={2}
+                        connectNulls
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-sm text-gray-400 py-6">No data found for this period</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const { data: session, status } = useSession();
   const [geoData, setGeoData] = useState<GeoData | null>(null);
@@ -479,6 +645,13 @@ export default function Home() {
 
       {geoData && !loading && (
         <div className="space-y-12">
+          {geoData.landingPageTrends && geoData.landingPageTrends.length > 0 && (
+            <LandingPageTrendsSection
+              rows={geoData.landingPageTrends}
+              gran={granularity}
+            />
+          )}
+
           <ChartSection
             title="AI Referral Traffic"
             description="Sessions from AI tools (Perplexity, ChatGPT, Gemini, etc.) by source"
