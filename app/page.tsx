@@ -166,10 +166,10 @@ const METRIC_CONFIGS: MetricConfig[] = [
 ];
 
 function normalizeLandingPage(path: string): string {
-  if (path === "/" || path === "") return "/";
-  if (path.startsWith("/sg/")) return "/sg/";
-  if (path.startsWith("/my/")) return "/my/";
-  if (path.startsWith("/ph/")) return "/ph/";
+  if (path === "/" || path === "" || path.startsWith("/?")) return "/";
+  if (path.startsWith("/sg")) return "/sg/";
+  if (path.startsWith("/my")) return "/my/";
+  if (path.startsWith("/ph")) return "/ph/";
   return path;
 }
 
