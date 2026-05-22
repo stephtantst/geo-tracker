@@ -643,13 +643,6 @@ export default function Home() {
 
       {geoData && !loading && (
         <div className="space-y-12">
-          {geoData.landingPageTrends && geoData.landingPageTrends.length > 0 && (
-            <LandingPageTrendsSection
-              rows={geoData.landingPageTrends}
-              gran={granularity}
-            />
-          )}
-
           <ChartSection
             title="AI Referral Traffic"
             description="Sessions from AI tools (Perplexity, ChatGPT, Gemini, etc.) by source"
@@ -685,6 +678,13 @@ export default function Home() {
               showSourceFilter
             />
           </div>
+
+          {geoData.landingPageTrends && geoData.landingPageTrends.length > 0 && (
+            <LandingPageTrendsSection
+              rows={geoData.landingPageTrends}
+              gran={granularity}
+            />
+          )}
         </div>
       )}
     </div>
