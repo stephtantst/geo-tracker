@@ -137,7 +137,10 @@ export async function GET(req: NextRequest) {
         limit: 100,
       }),
 
-      // Key landing pages time-series: /, /sg/, /my/, /ph/ — all traffic sources
+      // Key landing pages time-series: /, /sg/, /my/, /ph/ — all traffic sources.
+      // andGroup: scope to hitpayapp.com (excludes hitpay.com and other domains in the
+      // same GA4 property), then filter to the four root market pages only (FULL_REGEXP
+      // avoids BEGINS_WITH over-counting traffic that landed on subpages like /sg/pricing/).
       analyticsClient.runReport({
         property: `properties/${propertyId}`,
         dateRanges: dateRange,
@@ -151,20 +154,27 @@ export async function GET(req: NextRequest) {
           { name: "screenPageViewsPerSession" },
         ],
         dimensionFilter: {
-          orGroup: {
+          andGroup: {
             expressions: [
+              // Scope to hitpayapp.com only — prevents aggregating traffic from other
+              // domains (e.g. hitpay.com) whose root path is also "/"
               {
                 filter: {
-                  fieldName: "landingPage",
-                  stringFilter: { matchType: "EXACT" as const, value: "/" },
+                  fieldName: "hostname",
+                  stringFilter: { matchType: "CONTAINS" as const, value: "hitpayapp.com" },
                 },
               },
-              ...(["/sg/", "/my/", "/ph/"]).map((page) => ({
-                filter: {
-                  fieldName: "landingPage",
-                  stringFilter: { matchType: "BEGINS_WITH" as const, value: page },
+              // Match the four root market pages; FULL_REGEXP excludes subpages
+              {
+                orGroup: {
+                  expressions: [
+                    { filter: { fieldName: "landingPage", stringFilter: { matchType: "FULL_REGEXP" as const, value: "^/(\\?.*)?$" } } },
+                    { filter: { fieldName: "landingPage", stringFilter: { matchType: "FULL_REGEXP" as const, value: "^/sg/(\\?.*)?$" } } },
+                    { filter: { fieldName: "landingPage", stringFilter: { matchType: "FULL_REGEXP" as const, value: "^/my/(\\?.*)?$" } } },
+                    { filter: { fieldName: "landingPage", stringFilter: { matchType: "FULL_REGEXP" as const, value: "^/ph/(\\?.*)?$" } } },
+                  ],
                 },
-              })),
+              },
             ],
           },
         },
