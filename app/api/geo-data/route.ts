@@ -173,7 +173,7 @@ export async function GET(req: NextRequest) {
                         stringFilter: { matchType: "EXACT" as const, value: "/" },
                       },
                     },
-                    ...(["/sg/", "/my/", "/ph/"]).map((page) => ({
+                    ...(["/sg/", "/my/"]).map((page) => ({
                       filter: {
                         fieldName: "landingPage",
                         stringFilter: { matchType: "BEGINS_WITH" as const, value: page },

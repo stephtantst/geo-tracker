@@ -108,20 +108,18 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "pagesPerSession", label: "Pages/Session" },
 ];
 
-const KEY_PAGES = ["/", "/sg/", "/my/", "/ph/"];
+const KEY_PAGES = ["/", "/sg/", "/my/"];
 
 const PAGE_LABELS: Record<string, string> = {
   "/":    "Homepage",
   "/sg/": "SG",
   "/my/": "MY",
-  "/ph/": "PH",
 };
 
 const PAGE_COLORS: Record<string, string> = {
   "/":    "#3b82f6",
   "/sg/": "#10b981",
   "/my/": "#f59e0b",
-  "/ph/": "#8b5cf6",
 };
 
 interface MetricConfig {
