@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 const TABS = [
-  { label: "Analytics",  href: "/" },
-  { label: "Rankings",   href: "/ranking" },
+  { label: "Analytics",    href: "/" },
+  { label: "Rankings",     href: "/ranking" },
+  { label: "UTM Tracker",  href: "/utm" },
 ];
 
 function InfoModal({ onClose }: { onClose: () => void }) {
