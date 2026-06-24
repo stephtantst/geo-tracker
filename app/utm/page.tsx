@@ -112,11 +112,6 @@ export default function UTMPage() {
   const [search, setSearch] = useState("");
   const [mediumFilter, setMediumFilter] = useState("email");
 
-  useEffect(() => {
-    if (status === "authenticated") fetchData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, dateRange, mediumFilter]);
-
   async function fetchData() {
     setLoading(true);
     setError(null);
@@ -134,6 +129,12 @@ export default function UTMPage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (status === "authenticated") fetchData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, dateRange, mediumFilter]);
 
   function applyPreset(label: string, days: number) {
     setActivePreset(label);
