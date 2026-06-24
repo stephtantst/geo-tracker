@@ -16,6 +16,26 @@ const campaignSetFilter = {
   },
 };
 
+function buildDimensionFilter(medium: string) {
+  if (!medium) return campaignSetFilter;
+  return {
+    andGroup: {
+      expressions: [
+        campaignSetFilter,
+        {
+          filter: {
+            fieldName: "sessionMedium",
+            stringFilter: {
+              matchType: "EXACT" as const,
+              value: medium,
+            },
+          },
+        },
+      ],
+    },
+  };
+}
+
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
@@ -26,7 +46,9 @@ export async function GET(req: NextRequest) {
   const startDate = searchParams.get("startDate") ?? "90daysAgo";
   const endDate = searchParams.get("endDate") ?? "today";
   const granularity = searchParams.get("granularity") ?? "day";
+  const medium = searchParams.get("medium") ?? "";
   const dateRange = [{ startDate, endDate }];
+  const dimensionFilter = buildDimensionFilter(medium);
 
   const dateDimension =
     granularity === "month" ? "yearMonth" :
@@ -56,7 +78,7 @@ export async function GET(req: NextRequest) {
           { name: "engagementRate" },
           { name: "bounceRate" },
         ],
-        dimensionFilter: campaignSetFilter,
+        dimensionFilter,
         orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
         limit: 500,
       }),
@@ -69,7 +91,7 @@ export async function GET(req: NextRequest) {
           { name: dateDimension },
         ],
         metrics: [{ name: "sessions" }],
-        dimensionFilter: campaignSetFilter,
+        dimensionFilter,
         orderBys: [{ dimension: { dimensionName: dateDimension } }],
         limit: 5000,
       }),

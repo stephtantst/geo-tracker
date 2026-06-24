@@ -37,6 +37,8 @@ const LINE_COLORS = [
   "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#84cc16",
 ];
 
+const MEDIUM_OPTIONS = ["All", "email", "cpc", "organic", "social", "referral", "affiliate"];
+
 type CampaignSortKey = "sessions" | "newUsers" | "avgDuration" | "engagementRate" | "bounceRate";
 
 const SORT_COLS: { key: CampaignSortKey; label: string }[] = [
@@ -108,19 +110,21 @@ export default function UTMPage() {
   const [sortKey, setSortKey] = useState<CampaignSortKey>("sessions");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [search, setSearch] = useState("");
+  const [mediumFilter, setMediumFilter] = useState("email");
 
   useEffect(() => {
     if (status === "authenticated") fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, dateRange]);
+  }, [status, dateRange, mediumFilter]);
 
   async function fetchData() {
     setLoading(true);
     setError(null);
     const gran = granularityForRange(dateRange.startDate, dateRange.endDate);
     try {
+      const mediumParam = mediumFilter && mediumFilter !== "All" ? `&medium=${encodeURIComponent(mediumFilter)}` : "";
       const res = await fetch(
-        `/api/utm-data?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}&granularity=${gran}`
+        `/api/utm-data?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}&granularity=${gran}${mediumParam}`
       );
       if (!res.ok) throw new Error((await res.json()).error ?? "Request failed");
       setUtmData(await res.json());
@@ -177,27 +181,6 @@ export default function UTMPage() {
   const gran = utmData?.granularity ?? granularityForRange(dateRange.startDate, dateRange.endDate);
   const tickFmt = (d: string) => formatTickLabel(d, gran);
 
-  // Top 10 campaigns by sessions for the trend chart
-  const topCampaignNames = (utmData?.campaigns ?? []).slice(0, 10).map((r) => r.campaign);
-  const topSet = new Set(topCampaignNames);
-
-  const trendChartData = (() => {
-    if (!utmData?.trends?.length) return { data: [], campaigns: topCampaignNames };
-    const dateMap: Record<string, Record<string, number>> = {};
-    for (const row of utmData.trends) {
-      if (!topSet.has(row.campaign)) continue;
-      const date = normalizeDate(row.date, gran);
-      if (!dateMap[date]) dateMap[date] = {};
-      dateMap[date][row.campaign] = (dateMap[date][row.campaign] ?? 0) + parseInt(row.sessions ?? "0", 10);
-    }
-    return {
-      data: Object.entries(dateMap)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([date, vals]) => ({ date, ...vals })),
-      campaigns: topCampaignNames,
-    };
-  })();
-
   const filteredCampaigns = (utmData?.campaigns ?? [])
     .filter((r) => {
       if (!search) return true;
@@ -215,6 +198,30 @@ export default function UTMPage() {
       return sortDir === "desc" ? bv - av : av - bv;
     });
 
+  // Top 10 by sessions from the filtered set — chart tracks what the table shows
+  const chartCampaignNames = [...filteredCampaigns]
+    .sort((a, b) => parseInt(b.sessions ?? "0") - parseInt(a.sessions ?? "0"))
+    .slice(0, 10)
+    .map((r) => r.campaign);
+  const chartSet = new Set(chartCampaignNames);
+
+  const trendChartData = (() => {
+    if (!utmData?.trends?.length) return { data: [], campaigns: chartCampaignNames };
+    const dateMap: Record<string, Record<string, number>> = {};
+    for (const row of utmData.trends) {
+      if (!chartSet.has(row.campaign)) continue;
+      const date = normalizeDate(row.date, gran);
+      if (!dateMap[date]) dateMap[date] = {};
+      dateMap[date][row.campaign] = (dateMap[date][row.campaign] ?? 0) + parseInt(row.sessions ?? "0", 10);
+    }
+    return {
+      data: Object.entries(dateMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, vals]) => ({ date, ...vals })),
+      campaigns: chartCampaignNames,
+    };
+  })();
+
   const totalSessions = (utmData?.campaigns ?? []).reduce((s, r) => s + parseInt(r.sessions ?? "0", 10), 0);
   const totalNewUsers = (utmData?.campaigns ?? []).reduce((s, r) => s + parseInt(r.newUsers ?? "0", 10), 0);
   const uniqueCampaigns = new Set((utmData?.campaigns ?? []).map((r) => r.campaign)).size;
@@ -229,6 +236,28 @@ export default function UTMPage() {
           <button onClick={() => signOut()} className="text-sm text-gray-500 hover:text-gray-700">
             Sign out
           </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-500">Medium</span>
+          <div className="flex items-center gap-1">
+            {MEDIUM_OPTIONS.map((opt) => (
+              <button
+                key={opt}
+                onClick={() => setMediumFilter(opt === "All" ? "" : opt)}
+                className={`px-3 py-1.5 text-xs rounded-md font-medium transition-colors ${
+                  (opt === "All" && !mediumFilter) || mediumFilter === opt
+                    ? "bg-indigo-600 text-white"
+                    : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -317,7 +346,11 @@ export default function UTMPage() {
       {utmData && trendChartData.data.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-lg p-6 mb-8">
           <h2 className="text-sm font-semibold text-gray-800 mb-1">Sessions Over Time</h2>
-          <p className="text-xs text-gray-400 mb-4">Top 10 campaigns by sessions</p>
+          <p className="text-xs text-gray-400 mb-4">
+            Top {chartCampaignNames.length} campaign{chartCampaignNames.length !== 1 ? "s" : ""} by sessions
+            {search ? ` matching "${search}"` : ""}
+            {mediumFilter ? ` · medium: ${mediumFilter}` : ""}
+          </p>
           <ResponsiveContainer width="100%" height={320}>
             <LineChart data={trendChartData.data}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
